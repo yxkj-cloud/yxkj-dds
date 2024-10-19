@@ -1,9 +1,13 @@
 package cloud.yxkj.dds;
 
+import cloud.yxkj.dds.listener.DdsListener;
 import cloud.yxkj.dds.sql.MultipleDataSource;
 
 import javax.sql.DataSource;
-import java.util.*;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Map;
+import java.util.NoSuchElementException;
 
 /**
  * 动态数据源
@@ -12,6 +16,8 @@ import java.util.*;
  */
 public class YxkjDds extends MultipleDataSource {
     private final ThreadLocal<Collection<Object>> dataSourceKeysLocal = new ThreadLocal<>();
+
+    private final DdsListener ddsListener = DdsListener.instance();
 
     /**
      * 构造动态数据源
@@ -30,6 +36,7 @@ public class YxkjDds extends MultipleDataSource {
 
     public void setActive(Object... dataSourceKeys) {
         dataSourceKeysLocal.set(Arrays.asList(dataSourceKeys));
+        ddsListener.onAfterSetActive(this, dataSourceKeys);
     }
 
     @Override

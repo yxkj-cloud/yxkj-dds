@@ -99,7 +99,6 @@ public class MultipleCallableStatement extends MultiplePreparedStatement impleme
     }
 
     @Override
-    @Deprecated(since = "1.2")
     public BigDecimal getBigDecimal(int parameterIndex, int scale) throws SQLException {
         return getCallableStatement().getBigDecimal(parameterIndex, scale);
     }

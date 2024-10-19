@@ -1,5 +1,6 @@
 package cloud.yxkj.dds.sql;
 
+import cloud.yxkj.dds.listener.DdsListener;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 
@@ -27,6 +28,8 @@ import java.util.stream.Collectors;
  */
 @RequiredArgsConstructor
 public abstract class MultipleDataSource implements DataSource {
+    private final DdsListener ddsListener = DdsListener.instance();
+
     private final Map<Object, DataSource> dataSources;
 
     /**
@@ -48,16 +51,22 @@ public abstract class MultipleDataSource implements DataSource {
 
     @Override
     public Connection getConnection() {
+        ddsListener.onBeforeGetConnection(this);
         Map<DataSource, Connection> connectionMap = getActiveDataSources().stream()
             .collect(Collectors.toMap(ds -> ds, this::getConnectionWithoutException));
-        return new MultipleConnection(this, connectionMap);
+        MultipleConnection connection = new MultipleConnection(this, connectionMap);
+        ddsListener.onAfterGetConnection(this, connection);
+        return connection;
     }
 
     @Override
     public Connection getConnection(String username, String password) {
+        ddsListener.onBeforeGetConnection(this);
         Map<DataSource, Connection> connectionMap = getActiveDataSources().stream()
             .collect(Collectors.toMap(ds -> ds, ds -> getConnectionWithoutException(ds, username, password)));
-        return new MultipleConnection(this, connectionMap);
+        MultipleConnection connection = new MultipleConnection(this, connectionMap);
+        ddsListener.onAfterGetConnection(this, connection);
+        return connection;
     }
 
     @SneakyThrows

@@ -161,7 +161,6 @@ public class MultiplePreparedStatement extends MultipleStatement implements Prep
     }
 
     @Override
-    @Deprecated(since = "1.2")
     public void setUnicodeStream(int parameterIndex, InputStream x, int length) throws SQLException {
         for (PreparedStatement statement : preparedStatement) {
             statement.setUnicodeStream(parameterIndex, x, length);

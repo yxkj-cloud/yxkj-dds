@@ -1,10 +1,25 @@
 package cloud.yxkj.dds.sql;
 
+import cloud.yxkj.dds.listener.DdsListener;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
 
 import javax.sql.DataSource;
-import java.sql.*;
+import java.sql.Array;
+import java.sql.Blob;
+import java.sql.CallableStatement;
+import java.sql.Clob;
+import java.sql.Connection;
+import java.sql.DatabaseMetaData;
+import java.sql.NClob;
+import java.sql.PreparedStatement;
+import java.sql.SQLClientInfoException;
+import java.sql.SQLException;
+import java.sql.SQLWarning;
+import java.sql.SQLXML;
+import java.sql.Savepoint;
+import java.sql.Statement;
+import java.sql.Struct;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -21,19 +36,21 @@ import java.util.stream.Collectors;
  */
 @RequiredArgsConstructor
 public class MultipleConnection implements Connection {
+    private final DdsListener ddsListener = DdsListener.instance();
+
     private final MultipleDataSource multipleDataSource;
 
     private final Map<DataSource, Connection> connections;
 
     private List<Connection> getActiveConnections() {
         return multipleDataSource.getActiveDataSources().stream()
-                .map(ds -> connections.computeIfAbsent(ds, this::getConnectionWithoutException))
-                .collect(Collectors.toList());
+            .map(ds -> connections.computeIfAbsent(ds, this::getConnectionWithoutException))
+            .collect(Collectors.toList());
     }
 
     private Connection getActiveConnection() {
         return getActiveConnections().stream().findFirst()
-                .orElseThrow(() -> new NoSuchElementException("No active connection found"));
+            .orElseThrow(() -> new NoSuchElementException("No active connection found"));
     }
 
     @SneakyThrows
@@ -43,29 +60,38 @@ public class MultipleConnection implements Connection {
 
     @Override
     public Statement createStatement() throws SQLException {
+        ddsListener.onBeforeCreateStatement(this);
         List<Statement> statements = new ArrayList<>();
         for (Connection connection : getActiveConnections()) {
             statements.add(connection.createStatement());
         }
-        return new MultipleStatement(statements, this);
+        MultipleStatement statement = new MultipleStatement(statements, this);
+        ddsListener.onAfterCreateStatement(this, statement);
+        return statement;
     }
 
     @Override
     public PreparedStatement prepareStatement(String sql) throws SQLException {
+        ddsListener.onBeforePreparedStatement(this, sql);
         List<PreparedStatement> statements = new ArrayList<>();
         for (Connection connection : getActiveConnections()) {
             statements.add(connection.prepareStatement(sql));
         }
-        return new MultiplePreparedStatement(statements, this);
+        MultiplePreparedStatement statement = new MultiplePreparedStatement(statements, this);
+        ddsListener.onAfterPrepareStatement(this, sql, statement);
+        return statement;
     }
 
     @Override
     public CallableStatement prepareCall(String sql) throws SQLException {
+        ddsListener.onBeforePrepareCall(this, sql);
         List<CallableStatement> statements = new ArrayList<>();
         for (Connection connection : getActiveConnections()) {
             statements.add(connection.prepareCall(sql));
         }
-        return new MultipleCallableStatement(statements, this);
+        MultipleCallableStatement statement = new MultipleCallableStatement(statements, this);
+        ddsListener.onAfterPrepareCall(this, sql, statement);
+        return statement;
     }
 
     @Override
@@ -87,23 +113,29 @@ public class MultipleConnection implements Connection {
 
     @Override
     public void commit() throws SQLException {
+        ddsListener.onBeforeCommit(this);
         for (Connection connection : getActiveConnections()) {
             connection.commit();
         }
+        ddsListener.onAfterCommit(this);
     }
 
     @Override
     public void rollback() throws SQLException {
+        ddsListener.onBeforeRollback(this);
         for (Connection connection : getActiveConnections()) {
             connection.rollback();
         }
+        ddsListener.onAfterRollback(this);
     }
 
     @Override
     public void close() throws SQLException {
+        ddsListener.onBeforeClose(this);
         for (Connection connection : getActiveConnections()) {
             connection.close();
         }
+        ddsListener.onAfterClose(this);
     }
 
     @Override
@@ -166,29 +198,38 @@ public class MultipleConnection implements Connection {
 
     @Override
     public Statement createStatement(int resultSetType, int resultSetConcurrency) throws SQLException {
+        ddsListener.onBeforeCreateStatement(this);
         List<Statement> statements = new ArrayList<>();
         for (Connection connection : getActiveConnections()) {
             statements.add(connection.createStatement(resultSetType, resultSetConcurrency));
         }
-        return new MultipleStatement(statements, this);
+        MultipleStatement statement = new MultipleStatement(statements, this);
+        ddsListener.onAfterCreateStatement(this, statement);
+        return statement;
     }
 
     @Override
     public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
+        ddsListener.onBeforePreparedStatement(this, sql);
         List<PreparedStatement> statements = new ArrayList<>();
         for (Connection connection : getActiveConnections()) {
             statements.add(connection.prepareStatement(sql, resultSetType, resultSetConcurrency));
         }
-        return new MultiplePreparedStatement(statements, this);
+        MultiplePreparedStatement statement = new MultiplePreparedStatement(statements, this);
+        ddsListener.onAfterPrepareStatement(this, sql, statement);
+        return statement;
     }
 
     @Override
     public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency) throws SQLException {
+        ddsListener.onBeforePrepareCall(this, sql);
         List<CallableStatement> statements = new ArrayList<>();
         for (Connection connection : getActiveConnections()) {
             statements.add(connection.prepareCall(sql, resultSetType, resultSetConcurrency));
         }
-        return new MultipleCallableStatement(statements, this);
+        MultipleCallableStatement statement = new MultipleCallableStatement(statements, this);
+        ddsListener.onAfterPrepareCall(this, sql, statement);
+        return statement;
     }
 
     @Override
@@ -218,7 +259,7 @@ public class MultipleConnection implements Connection {
     @Override
     public Savepoint setSavepoint() throws SQLException {
         Map<Connection, Savepoint> savepointMap = getActiveConnections().stream()
-                .collect(Collectors.toMap(conn -> conn, this::getSavepointWithoutException));
+            .collect(Collectors.toMap(conn -> conn, this::getSavepointWithoutException));
         return new MultipleSavepoint(savepointMap);
     }
 
@@ -230,7 +271,7 @@ public class MultipleConnection implements Connection {
     @Override
     public Savepoint setSavepoint(String name) throws SQLException {
         Map<Connection, Savepoint> savepointMap = getActiveConnections().stream()
-                .collect(Collectors.toMap(conn -> conn, conn -> this.getSavepointWithoutException(conn, name)));
+            .collect(Collectors.toMap(conn -> conn, conn -> this.getSavepointWithoutException(conn, name)));
         return new MultipleSavepoint(savepointMap);
     }
 
@@ -241,72 +282,94 @@ public class MultipleConnection implements Connection {
 
     @Override
     public void rollback(Savepoint savepoint) throws SQLException {
+        ddsListener.onBeforeRollback(this, savepoint);
         MultipleSavepoint multipleSavepoint = (MultipleSavepoint) savepoint;
         for (Map.Entry<Connection, Savepoint> entry : multipleSavepoint.getSavepoints().entrySet()) {
             entry.getKey().rollback(entry.getValue());
         }
+        ddsListener.onAfterRollback(this, savepoint);
     }
 
     @Override
     public void releaseSavepoint(Savepoint savepoint) throws SQLException {
+        ddsListener.onBeforeReleaseSavepoint(this, savepoint);
         MultipleSavepoint multipleSavepoint = (MultipleSavepoint) savepoint;
         for (Map.Entry<Connection, Savepoint> entry : multipleSavepoint.getSavepoints().entrySet()) {
             entry.getKey().releaseSavepoint(entry.getValue());
         }
+        ddsListener.onAfterReleaseSavepoint(this, savepoint);
     }
 
     @Override
     public Statement createStatement(int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
+        ddsListener.onBeforeCreateStatement(this);
         List<Statement> statements = new ArrayList<>();
         for (Connection connection : getActiveConnections()) {
             statements.add(connection.createStatement(resultSetType, resultSetConcurrency, resultSetHoldability));
         }
-        return new MultipleStatement(statements, this);
+        MultipleStatement statement = new MultipleStatement(statements, this);
+        ddsListener.onAfterCreateStatement(this, statement);
+        return statement;
     }
 
     @Override
     public PreparedStatement prepareStatement(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
+        ddsListener.onBeforePreparedStatement(this, sql);
         List<PreparedStatement> statements = new ArrayList<>();
         for (Connection connection : getActiveConnections()) {
             statements.add(connection.prepareStatement(sql, resultSetType, resultSetConcurrency, resultSetHoldability));
         }
-        return new MultiplePreparedStatement(statements, this);
+        MultiplePreparedStatement statement = new MultiplePreparedStatement(statements, this);
+        ddsListener.onAfterPrepareStatement(this, sql, statement);
+        return statement;
     }
 
     @Override
     public CallableStatement prepareCall(String sql, int resultSetType, int resultSetConcurrency, int resultSetHoldability) throws SQLException {
+        ddsListener.onBeforePrepareCall(this, sql);
         List<CallableStatement> statements = new ArrayList<>();
         for (Connection connection : getActiveConnections()) {
             statements.add(connection.prepareCall(sql, resultSetType, resultSetConcurrency, resultSetHoldability));
         }
-        return new MultipleCallableStatement(statements, this);
+        MultipleCallableStatement statement = new MultipleCallableStatement(statements, this);
+        ddsListener.onAfterPrepareCall(this, sql, statement);
+        return statement;
     }
 
     @Override
     public PreparedStatement prepareStatement(String sql, int autoGeneratedKeys) throws SQLException {
+        ddsListener.onBeforePreparedStatement(this, sql);
         List<PreparedStatement> statements = new ArrayList<>();
         for (Connection connection : getActiveConnections()) {
             statements.add(connection.prepareStatement(sql, autoGeneratedKeys));
         }
-        return new MultiplePreparedStatement(statements, this);
+        MultiplePreparedStatement statement = new MultiplePreparedStatement(statements, this);
+        ddsListener.onAfterPrepareStatement(this, sql, statement);
+        return statement;
     }
 
     @Override
     public PreparedStatement prepareStatement(String sql, int[] columnIndexes) throws SQLException {
+        ddsListener.onBeforePreparedStatement(this, sql);
         List<PreparedStatement> statements = new ArrayList<>();
         for (Connection connection : getActiveConnections()) {
             statements.add(connection.prepareStatement(sql, columnIndexes));
         }
-        return new MultiplePreparedStatement(statements, this);
+        MultiplePreparedStatement statement = new MultiplePreparedStatement(statements, this);
+        ddsListener.onAfterPrepareStatement(this, sql, statement);
+        return statement;
     }
 
     @Override
     public PreparedStatement prepareStatement(String sql, String[] columnNames) throws SQLException {
+        ddsListener.onBeforePreparedStatement(this, sql);
         List<PreparedStatement> statements = new ArrayList<>();
         for (Connection connection : getActiveConnections()) {
             statements.add(connection.prepareStatement(sql, columnNames));
         }
-        return new MultiplePreparedStatement(statements, this);
+        MultiplePreparedStatement statement = new MultiplePreparedStatement(statements, this);
+        ddsListener.onAfterPrepareStatement(this, sql, statement);
+        return statement;
     }
 
     @Override
