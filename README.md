@@ -61,4 +61,28 @@ dds.setActive("A", "B");
 
 ```
 
-### 4. 监听（尚未完成）
+### 4. 监听
+
+监听器接口：`cloud.yxkj.dds.listener.DdsListener`
+扩展方式：JAVA SPI
+
+示例：
+1、新增接口的实现类型
+```java
+package cloud.yxkj.dds.listener.impl;
+import cloud.yxkj.dds.listener.DdsListener;
+
+public class MyListener implements DdsListener {
+    @Override
+    public void onAfterSetActive(YxkjDds yxkjDds, Object... actives) {
+        System.out.println("切换数据源为：" + actives);
+    }
+    
+    // 更多监听接口参考 cloud.yxkj.dds.listener.DdsListener
+}
+```
+2、新增实现类的配置文件
+```
+新建文件：META-INF/services/cloud.yxkj.dds.listener.DdsListener
+文件内容：cloud.yxkj.dds.listener.impl.MyListener
+```
